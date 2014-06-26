@@ -357,7 +357,7 @@ showcommands!     Show git commands while executing them
 
 cmd_finish() {
 	OPTIONS_SPEC="\
-git flow hotfix finish [-h] [-F] [-s] [-u] [-m | -f ] [-p] [-k] [-n] [-b] <version>
+git flow hotfix finish [-h] [-F] [-s] [-u] [-m | -f ] [-p] [-k] [-n] [-b | -o] <version>
 
 Finish hotfix branch <version>
 --
@@ -375,6 +375,7 @@ k,[no]keep            Keep branch after performing finish
 D,[no]force_delete    Force delete hotfix branch after finish
 n,[no]notag           Don't tag this hotfix
 b,[no]nobackmerge     Don't back-merge master, or tag if applicable, in develop
+o,mergeonlymaster     Don't merge back to develop, only to master
 "
 	local opts commit keepmsg remotebranchdeleted localbranchdeleted
 
@@ -391,20 +392,22 @@ b,[no]nobackmerge     Don't back-merge master, or tag if applicable, in develop
 	DEFINE_boolean 'force_delete' false "force delete hotfix branch after finish" D
 	DEFINE_boolean 'notag' false "don't tag this hotfix" n
 	DEFINE_boolean 'nobackmerge' false "don't back-merge $MASTER_BRANCH, or tag if applicable, in $DEVELOP_BRANCH " b
+	DEFINE_boolean 'mergeonlymaster' false "Don't merge back to $DEVELOP_BRANCH, only to $MASTER_BRANCH" o
 
 	# Override defaults with values from config
-	gitflow_override_flag_boolean   "hotfix.finish.fetch"          "fetch"
-	gitflow_override_flag_boolean   "hotfix.finish.sign"           "sign"
-	gitflow_override_flag_boolean   "hotfix.finish.push"           "push"
-	gitflow_override_flag_boolean   "hotfix.finish.keep"           "keep"
-	gitflow_override_flag_boolean   "hotfix.finish.keepremote"     "keepremote"
-	gitflow_override_flag_boolean   "hotfix.finish.keeplocal"      "keeplocal"
-	gitflow_override_flag_boolean   "hotfix.finish.force-delete"   "force_delete"
-	gitflow_override_flag_boolean   "hotfix.finish.notag"          "notag"
-	gitflow_override_flag_boolean   "hotfix.finish.nobackmerge"    "nobackmerge"
-	gitflow_override_flag_string    "hotfix.finish.signingkey"     "signingkey"
-	gitflow_override_flag_string    "hotfix.finish.message"        "message"
-	gitflow_override_flag_string    "hotfix.finish.messagefile"    "messagefile"
+	gitflow_override_flag_boolean   "hotfix.finish.fetch"           "fetch"
+	gitflow_override_flag_boolean   "hotfix.finish.sign"            "sign"
+	gitflow_override_flag_boolean   "hotfix.finish.push"            "push"
+	gitflow_override_flag_boolean   "hotfix.finish.keep"            "keep"
+	gitflow_override_flag_boolean   "hotfix.finish.keepremote"      "keepremote"
+	gitflow_override_flag_boolean   "hotfix.finish.keeplocal"       "keeplocal"
+	gitflow_override_flag_boolean   "hotfix.finish.force-delete"    "force_delete"
+	gitflow_override_flag_boolean   "hotfix.finish.notag"           "notag"
+	gitflow_override_flag_boolean   "hotfix.finish.nobackmerge"     "nobackmerge"
+	gitflow_override_flag_string    "hotfix.finish.signingkey"      "signingkey"
+	gitflow_override_flag_string    "hotfix.finish.message"         "message"
+	gitflow_override_flag_string    "hotfix.finish.messagefile"     "messagefile"
+	gitflow_override_flag_boolean   "hotfix.finish.mergeonlymaster" "mergeonlymaster"
 
 	# Parse arguments
 	parse_args "$@"
@@ -425,6 +428,11 @@ b,[no]nobackmerge     Don't back-merge master, or tag if applicable, in develop
 	# Keeping both branches implies the --keep flag to be true.
 	if flag keepremote && flag keeplocal; then
 		FLAGS_keep=$FLAGS_TRUE
+	fi
+
+	# Check that not both no merge flags were given
+	if flag mergeonlymaster && flag nobackmerge; then
+	    die "You can't use 'mergeonlymaster' and 'nobackmerge' together."
 	fi
 
 	# Sanity checks
@@ -534,10 +542,10 @@ b,[no]nobackmerge     Don't back-merge master, or tag if applicable, in develop
 			MERGE_BRANCH="$BRANCH"
 		fi
 
-		# Try to merge into develop.
+		# Try to merge into develop unless mergeonlymaster flag is present.
 		# In case a previous attempt to finish this release branch has failed,
 		# but the merge into develop was successful, we skip it now
-		if ! git_is_branch_merged_into "$MERGE_BRANCH" "$DEVELOP_BRANCH"; then
+		if noflag mergeonlymaster && ! git_is_branch_merged_into "$MERGE_BRANCH" "$DEVELOP_BRANCH"; then
 			git_do checkout "$DEVELOP_BRANCH" || die "Could not check out branch '$DEVELOP_BRANCH'."
 
 			if noflag nobackmerge; then
